@@ -53,7 +53,7 @@ def main():
             if DEBUG: sys.stderr.write("posts to print: " + str(len(posts_to_print)) + "\n")
         
     #
-    # add all the posts we're going to print to the database with the current timestamp
+    # add all the posts to the database
     #
     f = open(db, 'w')
     for title in posts_to_skip + posts_to_print:
