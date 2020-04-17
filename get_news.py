@@ -12,6 +12,7 @@ import threading
 import re
 from HTMLParser import HTMLParser
 import codecs
+from fuzzywuzzy import fuzz
 import sys
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -227,28 +228,36 @@ def news():
       db_lines.append(db_line.replace("\n","")) 
 
   new_lines = []
-  for line in lines:
-    if line not in db_lines:
-      new_lines.append(line)
-
   old_lines = []
-  for db_line in db_lines:
-    if db_line in lines:
-      old_lines.append(db_line)
+
+  for line in lines:
+    fuzzy_ratio = line_in_list_fuzzy_ratio(line, db_lines)
+    if fuzzy_ratio < 90:
+      new_lines.append(line)
+    elif fuzzy_ratio < 100:
+      if DEBUG: sys.stderr.write("Updated line: " + line + "\n")
+      old_lines.append(line)
 
   if DEBUG: sys.stderr.write("Fetched new lines: " + str(len(new_lines)) + "\n")
-  if DEBUG: sys.stderr.write("Kept old lines: " + str(len(old_lines)) + "\n")
 
-  # add all the posts to the database (new posts first)
-  f = codecs.open(db_news, 'w', 'utf8')
-  for line in new_lines + old_lines:
-    f.write(unicode(line) + "\n")
-  f.close
-      
-  # output all of the new posts
-  if len(new_lines) and switch_news.is_pressed:
-    if DEBUG: sys.stderr.write("Going to read new lines: " + str(len(new_lines)) + "\n")
-    broadcast(new_lines, tune_news)
+  if len(new_lines):
+
+      for db_line in db_lines:
+        if db_line in lines:
+          old_lines.append(db_line)
+
+      if DEBUG: sys.stderr.write("Kept old lines: " + str(len(old_lines)) + "\n")
+
+      # add all the posts to the database (new posts first)
+      f = codecs.open(db_news, 'w', 'utf8')
+      for line in new_lines + old_lines:
+        f.write(unicode(line) + "\n")
+      f.close
+          
+      # output all of the new posts
+      if switch_news.is_pressed:
+        if DEBUG: sys.stderr.write("Going to read new lines: " + str(len(new_lines)) + "\n")
+        broadcast(new_lines, tune_news)
 
   # set a timer to run news() again in 5 minutes
   if DEBUG:
@@ -302,7 +311,7 @@ def broadcast_thread(lines, tune):
       with open('output' + str(num) + '.mp3', 'wb') as out:
         # Write the response to the output file.
         out.write(response.audio_content)
-        print('Audio content written to file "output.mp3"')
+        print('Audio content written to file "output' + str(num) + '.mp3"')
       
   if len(lines):
     if not args.silent:
@@ -350,6 +359,13 @@ def slugify(value):
 
 def clean_string(s):
     return HTMLParser().unescape(re.sub('<[^<]+?>', '', s.replace("\n"," ").encode('utf8','replace')))
+
+
+def line_in_list_fuzzy_ratio(line,list_of_lines):
+    m = 0
+    for l in list_of_lines:
+        m = max(m, fuzz.ratio(line.lower(), l.lower()))
+    return m
 
 
 if __name__ == '__main__':
