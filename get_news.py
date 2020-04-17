@@ -62,20 +62,30 @@ def main():
 # Button handlers
 #
 
+klok_lock = threading.Lock()
+
 def one_minute_backward():
+  klok_lock.acquire()
   os.system('python /home/vicmortelmans/Public/klok/klok_1_minute_hands_backward.py')
+  klok_lock.release()
 
 
 def ten_minutes_backward():
+  klok_lock.acquire()
   os.system('python /home/vicmortelmans/Public/klok/klok_10_minutes_hands_backward.py')
+  klok_lock.release()
 
 
 def one_minute_forward():
+  klok_lock.acquire()
   os.system('python /home/vicmortelmans/Public/klok/klok_1_minute_hands_forward.py')
+  klok_lock.release()
 
 
 def ten_minutes_forward():
+  klok_lock.acquire()
   os.system('python /home/vicmortelmans/Public/klok/klok_10_minutes_hands_forward.py')
+  klok_lock.release()
 
 
 def read_latest_item():
@@ -180,11 +190,11 @@ def news():
 # Audio
 #
 
-lock = threading.Lock()
+broadcast_lock = threading.Lock()
 
 def broadcast(lines, tune):
 
-  lock.acquire()
+  broadcast_lock.acquire()
 
   if length(posts) and not args.silent and not broadcast_mute:
     # Play the announcement tune
@@ -222,7 +232,7 @@ def broadcast(lines, tune):
       os.system("omxplayer output.mp3")
 
   broadcast_mute = False
-  lock.release()
+  broadcast_lock.release()
 
 #
 # Generic functions
