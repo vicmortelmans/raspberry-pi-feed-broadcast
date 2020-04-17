@@ -149,6 +149,7 @@ def read_latest_5_items():
 
 
 def kill_playing_broadcasts():
+  global broadcast_mute
   if DEBUG: sys.stderr.write("Stop reading\n")
   broadcast_mute = True
   os.system('killall omxplayer.bin')
@@ -166,6 +167,8 @@ def get_first_items_from_live_feed(url, count):
 
 def get_first_lines_from_db(db, count):
   lines = []
+#  import pdb; pdb.set_trace()
+
   with codecs.open(db, 'r', 'utf8') as database:
     for line in database:
       if len(lines) < count:
@@ -191,8 +194,6 @@ def extract_titles_and_descriptions(items):
 
 def extract_titles_and_contents(items):
   lines = []
-#  import pdb; pdb.set_trace()
-
   for item in items:
     lines.append(clean_string(item.title + '. ' + item.content[0].value))
   return lines
@@ -205,8 +206,9 @@ def news():
 
   # This function runs in the background every five minutes. It reads a number of 
   # feeds (urls_news). All items from the feeds are stored into a single list of items. 
-  # This list is converted to a list of lines. Out of this list, two lists are made,
-  # one with the lines that were not in the datase (db_news) and one with the items that were.
+  # This list is converted to a list of lines. This list is filtered, keeping the lines 
+  # that are not in the datase (db_news). The database lines are filtered, keeping the
+  # lines that are still in the feeds.
   # The database is rewritten with new lines first and then the old lines.
   # New lines are broadcasted.
 
@@ -225,12 +227,14 @@ def news():
       db_lines.append(db_line.replace("\n","")) 
 
   new_lines = []
-  old_lines = []
   for line in lines:
-    if line in db_lines:
-      old_lines.append(line)
-    else:
+    if line not in db_lines:
       new_lines.append(line)
+
+  old_lines = []
+  for db_line in db_lines:
+    if db_line in lines:
+      old_lines.append(db_line)
 
   if DEBUG: sys.stderr.write("Fetched new lines: " + str(len(new_lines)) + "\n")
   if DEBUG: sys.stderr.write("Kept old lines: " + str(len(old_lines)) + "\n")
@@ -309,8 +313,8 @@ def broadcast_thread(lines, tune):
 
       for num, line in enumerate(lines):
         # Play the audio file
-        if DEBUG: sys.stderr.write("Playing audio for line: " + line + "\n")
         if not broadcast_mute:
+          if DEBUG: sys.stderr.write("Playing audio for line: " + line + "\n")
           os.system("omxplayer output" + str(num) + ".mp3")
     else:
       if DEBUG:
