@@ -7,17 +7,24 @@ from google.cloud import texttospeech
 import os
 import argparse
 from gpiozero import Button
+from signal import pause
 import threading
+import re
+from HTMLParser import HTMLParser
+import codecs
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
-urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
+urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0", "https://data.buienradar.nl/1.0/feed/xml/rssbuienradar" ]
 url_angelus = "https://www.bijbelcitaat.be/feed/"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
 if not os.path.exists(db_news):
-  open(db_news, 'a').close()
+  codecs.open(db_news, 'a', 'utf8').close()
 
-DEBUG = False
+DEBUG = True
 
 # Initiate the parser
 parser = argparse.ArgumentParser()
@@ -28,7 +35,12 @@ parser.add_argument("--silent", "-s", action="store_true", help="Don't play soun
 # Read arguments from the command line
 args = parser.parse_args()
 
+# Instantiates a client
+if not args.silent:
+  client = texttospeech.TextToSpeechClient()
+
 # Define the buttons
+Button.was_held = False
 button_backward = Button(20)
 button_forward = Button(26)
 switch_news = Button(13)
@@ -37,7 +49,16 @@ button_play = Button(16)
 button_mute = Button(21)
 
 broadcast_mute = False
-  
+ 
+
+def threaded(fn):
+    def wrapper(*args, **kwargs):
+        thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
+        thread.start()
+        return thread
+    return wrapper
+
+
 def main():
   # Configure event handlers
   button_backward.when_released = one_minute_backward
@@ -45,15 +66,11 @@ def main():
   button_forward.when_released = one_minute_forward
   button_forward.when_held = ten_minutes_forward
   button_play.when_released = read_latest_item
-  button_news.when_held = read_latest_5_items
+  button_play.when_held = read_latest_5_items
   button_mute.when_pressed = kill_playing_broadcasts
   
-  # Instantiates a client
-  if not args.silent:
-      client = texttospeech.TextToSpeechClient()
-
   # Start polling the news feeds
-  news(urls_news, db_news)
+  news()
 
   # Wait for things to happen
   pause()
@@ -64,53 +81,79 @@ def main():
 
 klok_lock = threading.Lock()
 
+@threaded
 def one_minute_backward():
-  klok_lock.acquire()
-  os.system('python /home/vicmortelmans/Public/klok/klok_1_minute_hands_backward.py')
-  klok_lock.release()
+  if not button_backward.was_held:
+      klok_lock.acquire()
+      if DEBUG: sys.stderr.write("Going one minute backward\n")
+      os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
+      klok_lock.release()
+  button_backward.was_held = False
 
 
+@threaded
 def ten_minutes_backward():
+  button_backward.was_held = True
   klok_lock.acquire()
-  os.system('python /home/vicmortelmans/Public/klok/klok_10_minutes_hands_backward.py')
+  if DEBUG: sys.stderr.write("Going ten minutes backward\n")
+  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
   klok_lock.release()
 
 
+@threaded
 def one_minute_forward():
-  klok_lock.acquire()
-  os.system('python /home/vicmortelmans/Public/klok/klok_1_minute_hands_forward.py')
-  klok_lock.release()
+  if not button_forward.was_held:
+      klok_lock.acquire()
+      if DEBUG: sys.stderr.write("Going one minute forward\n")
+      os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
+      klok_lock.release()
+  button_forward.was_held = False
 
 
+@threaded
 def ten_minutes_forward():
+  button_forward.was_held = True
   klok_lock.acquire()
-  os.system('python /home/vicmortelmans/Public/klok/klok_10_minutes_hands_forward.py')
+  if DEBUG: sys.stderr.write("Going ten minutes forward\n")
+  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
   klok_lock.release()
 
 
 def read_latest_item():
-  if switch_play_news_or_angelus.ispressed: 
-    items = get_first_items_from_live_feed(url_angelus, 2)
-    lines = extract_descriptions(items)
-    broadcast(lines, tune_angelus)
-  else:
-    lines = get first_lines_from_db(db_news, 1)
-    broadcast(lines, tune_news)
+  if not button_play.was_held:
+      if DEBUG: sys.stderr.write("Going to read\n")
+      if not switch_play_news_or_angelus.is_pressed: 
+        if DEBUG: sys.stderr.write("Going to read angelus\n")
+        items = get_first_items_from_live_feed(url_angelus, 2)
+        lines = extract_titles_and_contents(items)
+        broadcast(lines, tune_angelus)
+      else:
+        if DEBUG: sys.stderr.write("Going to read news\n")
+        lines = get_first_lines_from_db(db_news, 1)
+        broadcast(lines, tune_news)
+  button_play.was_held = False
 
 
 def read_latest_5_items():
-  if switch_play_news_or_angelus.ispressed: 
+  button_play.was_held = True
+  if DEBUG: sys.stderr.write("Going to read a lot\n")
+  if not switch_play_news_or_angelus.is_pressed: 
+    if DEBUG: sys.stderr.write("Going to read angelus\n")
     items = get_first_items_from_live_feed(url_angelus, 2)
-    lines = extract_descriptions(items)
+    lines = extract_tiles_and_contents(items)
     broadcast(lines, tune_angelus)
   else:
-    lines = get first_items_from_db(db_news, 5)
+    if DEBUG: sys.stderr.write("Going to read a lot of news\n")
+    lines = get_first_lines_from_db(db_news, 5)
     broadcast(lines, tune_news)
 
 
 def kill_playing_broadcasts():
+  if DEBUG: sys.stderr.write("Stop reading\n")
   broadcast_mute = True
-  os.system('killall omxplayer')
+  os.system('killall omxplayer.bin')
+  if DEBUG: 
+    os.system('killall pv')
 
 #
 # Functions
@@ -120,24 +163,39 @@ def get_first_items_from_live_feed(url, count):
   feed = feedparser.parse(url)
   return feed.entries[0:count]
 
+
 def get_first_lines_from_db(db, count):
   lines = []
-  with open(db, 'r') as database:
+  with codecs.open(db, 'r', 'utf8') as database:
     for line in database:
-      if length(lines) < count:
-        lines += line
-      else 
+      if len(lines) < count:
+        lines.append(line)
+      else: 
         break 
+  return lines
 
-def extract_desriptions(items):
+
+def extract_descriptions(items):
   lines = []
   for item in items:
-    lines += item.description.replace("\n","").encode('utf8','replace')
+    lines.append(clean_string(item.description))
+  return lines
     
-def extract_titles_and_desriptions(items):
+
+def extract_titles_and_descriptions(items):
   lines = []
   for item in items:
-    lines += (item.title + ' ' + item.description).replace("\n","").encode('utf8','replace')
+    lines.append(clean_string(item.title + '. ' + item.description))
+  return lines
+    
+
+def extract_titles_and_contents(items):
+  lines = []
+#  import pdb; pdb.set_trace()
+
+  for item in items:
+    lines.append(clean_string(item.title + '. ' + item.content[0].value))
+  return lines
     
 #
 # Background functions
@@ -152,38 +210,48 @@ def news():
   # The database is rewritten with new lines first and then the old lines.
   # New lines are broadcasted.
 
+  if DEBUG: sys.stderr.write("Fetching news started\n")
+
   items = []
   for url in urls_news:
     feed = feedparser.parse(url)
-    items += feed.entries
+    items.extend(feed.entries)
     
-  lines = extract_tiles_and_descriptions(items)
+  lines = extract_titles_and_descriptions(items)
 
   db_lines = []
-  with open(db_news, 'r') as database:
+  with codecs.open(db_news, 'r', 'utf8') as database:
     for db_line in database:
-      db_lines += db_line 
+      db_lines.append(db_line.replace("\n","")) 
 
   new_lines = []
   old_lines = []
   for line in lines:
     if line in db_lines:
-      old_lines += line
+      old_lines.append(line)
     else:
-      new_lines += line
+      new_lines.append(line)
+
+  if DEBUG: sys.stderr.write("Fetched new lines: " + str(len(new_lines)) + "\n")
+  if DEBUG: sys.stderr.write("Kept old lines: " + str(len(old_lines)) + "\n")
 
   # add all the posts to the database (new posts first)
-  f = open(db, 'w')
+  f = codecs.open(db_news, 'w', 'utf8')
   for line in new_lines + old_lines:
-    f.write(line + "\n")
+    f.write(unicode(line) + "\n")
   f.close
       
   # output all of the new posts
-  if switch_news.is_pressed():
+  if len(new_lines) and switch_news.is_pressed:
+    if DEBUG: sys.stderr.write("Going to read new lines: " + str(len(new_lines)) + "\n")
     broadcast(new_lines, tune_news)
 
   # set a timer to run news() again in 5 minutes
-  threading.Timer(300.0, news).start()
+  if DEBUG:
+    interval = 30.0
+  else:
+    interval = 300.0
+  threading.Timer(interval, news).start()
 
 
 #
@@ -193,18 +261,22 @@ def news():
 broadcast_lock = threading.Lock()
 
 def broadcast(lines, tune):
+  thread = threading.Thread(target = broadcast_thread, args = (lines, tune))
+  thread.start()
+  return
+
+
+def broadcast_thread(lines, tune):
+  global broadcast_mute
+
+  if DEBUG: sys.stderr.write("Broadcasting started\n")
 
   broadcast_lock.acquire()
 
-  if length(posts) and not args.silent and not broadcast_mute:
-    # Play the announcement tune
-    if args.tune:
-      os.system("omxplayer " + tune)
-
-  for line in lines:
+  for num, line in enumerate(lines):
     print(line + "\n")
 
-    if length(posts) and not args.silent and not broadcast_mute:
+    if len(lines) and not args.silent:
       # Set the text input to be synthesized
       synthesis_input = texttospeech.types.SynthesisInput(text=line)
 
@@ -223,16 +295,35 @@ def broadcast(lines, tune):
       response = client.synthesize_speech(synthesis_input, voice, audio_config)
 
       # The response's audio_content is binary.
-      with open('output.mp3', 'wb') as out:
+      with open('output' + str(num) + '.mp3', 'wb') as out:
         # Write the response to the output file.
         out.write(response.audio_content)
         print('Audio content written to file "output.mp3"')
       
-      # Play the audio file
-      os.system("omxplayer output.mp3")
+  if len(lines):
+    if not args.silent:
+      # Play the announcement tune
+      if tune and not broadcast_mute:
+        if DEBUG: sys.stderr.write("Playing tune: " + tune + "\n")
+        os.system("omxplayer " + tune)
+
+      for num, line in enumerate(lines):
+        # Play the audio file
+        if DEBUG: sys.stderr.write("Playing audio for line: " + line + "\n")
+        if not broadcast_mute:
+          os.system("omxplayer output" + str(num) + ".mp3")
+    else:
+      if DEBUG:
+        for line in lines:
+          if not broadcast_mute:
+            os.system('echo "'+ line + '" | pv -L 20 -q')
 
   broadcast_mute = False
   broadcast_lock.release()
+
+  if DEBUG: sys.stderr.write("Broadcasting done\n")
+
+  return
 
 #
 # Generic functions
@@ -251,6 +342,10 @@ def slugify(value):
     value = unicode(re.sub('[^\w\s.-]', '', value).strip().lower())
     value = unicode(re.sub('[-\s]+', '-', value))
     return value
+
+
+def clean_string(s):
+    return HTMLParser().unescape(re.sub('<[^<]+?>', '', s.replace("\n"," ").encode('utf8','replace')))
 
 
 if __name__ == '__main__':
