@@ -222,6 +222,8 @@ def news():
     
   lines = extract_titles_and_descriptions(items)
 
+  if DEBUG: sys.stderr.write("Fetched lines: " + str(len(lines)) + "\n")
+
   db_lines = []
   with codecs.open(db_news, 'r', 'utf8') as database:
     for db_line in database:
