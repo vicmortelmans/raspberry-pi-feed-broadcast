@@ -81,14 +81,34 @@ def main():
 #
 
 klok_lock = threading.Lock()
+pending_calibration = None
+
+def schedule_calibration():
+  global pending_calibration
+#  import pdb; pdb.set_trace()
+  if pending_calibration: 
+    pending_calibration.cancel()
+    if DEBUG: sys.stderr.write("Canceled a pending calibration\n")
+  pending_calibration = threading.Timer(10.0, calibrate)
+  pending_calibration.start()
+  if DEBUG: sys.stderr.write("Scheduled a calibration\n")
+
+
+def calibrate():
+  klok_lock.acquire()
+  if DEBUG: sys.stderr.write("Going to calibrate the clock\n")
+  os.system('python /home/pi/Public/klok/klok_calibrate.py')
+  klok_lock.release()
+
 
 @threaded
 def one_minute_backward():
   if not button_backward.was_held:
-      klok_lock.acquire()
-      if DEBUG: sys.stderr.write("Going one minute backward\n")
-      os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
-      klok_lock.release()
+    klok_lock.acquire()
+    if DEBUG: sys.stderr.write("Going one minute backward\n")
+    os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
+    schedule_calibration()
+    klok_lock.release()
   button_backward.was_held = False
 
 
@@ -98,16 +118,18 @@ def ten_minutes_backward():
   klok_lock.acquire()
   if DEBUG: sys.stderr.write("Going ten minutes backward\n")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
+  schedule_calibration()
   klok_lock.release()
 
 
 @threaded
 def one_minute_forward():
   if not button_forward.was_held:
-      klok_lock.acquire()
-      if DEBUG: sys.stderr.write("Going one minute forward\n")
-      os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
-      klok_lock.release()
+    klok_lock.acquire()
+    if DEBUG: sys.stderr.write("Going one minute forward\n")
+    os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
+    schedule_calibration()
+    klok_lock.release()
   button_forward.was_held = False
 
 
@@ -117,6 +139,7 @@ def ten_minutes_forward():
   klok_lock.acquire()
   if DEBUG: sys.stderr.write("Going ten minutes forward\n")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
+  schedule_calibration()
   klok_lock.release()
 
 
@@ -168,7 +191,6 @@ def get_first_items_from_live_feed(url, count):
 
 def get_first_lines_from_db(db, count):
   lines = []
-#  import pdb; pdb.set_trace()
 
   with codecs.open(db, 'r', 'utf8') as database:
     for line in database:
