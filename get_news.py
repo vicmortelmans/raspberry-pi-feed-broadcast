@@ -1,5 +1,4 @@
-#!/usr/bin/python
-
+#!/usr/bin/python3
 import feedparser
 import time
 import sys
@@ -10,14 +9,15 @@ from gpiozero import Button
 from signal import pause
 import threading
 import re
-from HTMLParser import HTMLParser
+from html.parser import HTMLParser
+import html
 import codecs
 from fuzzywuzzy import fuzz
+import nltk.data
+from lxml import etree
 import sys
-reload(sys)
-sys.setdefaultencoding('utf8')
 
-urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0", "https://data.buienradar.nl/1.0/feed/xml/rssbuienradar" ]
+urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 url_angelus = "https://www.bijbelcitaat.be/feed/"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
@@ -85,7 +85,6 @@ pending_calibration = None
 
 def schedule_calibration():
   global pending_calibration
-#  import pdb; pdb.set_trace()
   if pending_calibration: 
     pending_calibration.cancel()
     if DEBUG: sys.stderr.write("Canceled a pending calibration\n")
@@ -275,7 +274,7 @@ def news():
       # add all the posts to the database (new posts first)
       f = codecs.open(db_news, 'w', 'utf8')
       for line in new_lines + old_lines:
-        f.write(unicode(line) + "\n")
+        f.write(line + "\n")
       f.close
           
       # output all of the new posts
@@ -313,19 +312,24 @@ def broadcast_thread(lines, tune):
   for num, line in enumerate(lines):
     print(line + "\n")
 
-    if len(lines) and not args.silent:
+    if not args.silent:
       # Set the text input to be synthesized
-      synthesis_input = texttospeech.types.SynthesisInput(text=line)
+      ssml = line_to_ssml(line)
+#      import pdb; pdb.set_trace()
+      if DEBUG: sys.stderr.write("SSML formatted line: " + ssml + "\n")
+      synthesis_input = texttospeech.types.SynthesisInput(ssml=ssml)
 
       # Build the voice request, select the language code ("en-US") and the ssml
       # voice gender ("neutral")
       voice = texttospeech.types.VoiceSelectionParams(
         language_code='nl-NL',
+        name='nl-NL-Wavenet-C',
         ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE)
 
       # Select the type of audio file you want returned
       audio_config = texttospeech.types.AudioConfig(
-        audio_encoding=texttospeech.enums.AudioEncoding.MP3)
+        audio_encoding=texttospeech.enums.AudioEncoding.MP3,
+        volume_gain_db=-1.0)
 
       # Perform the text-to-speech request on the text input with the selected
       # voice parameters and audio file type
@@ -374,15 +378,26 @@ def slugify(value):
     """
     import unicodedata
     import re
-    value = unicode(value)
+    value = value
     value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore')
-    value = unicode(re.sub('[^\w\s.-]', '', value).strip().lower())
-    value = unicode(re.sub('[-\s]+', '-', value))
+    value = re.sub('[^\w\s.-]', '', value).strip().lower()
+    value = re.sub('[-\s]+', '-', value)
     return value
 
 
 def clean_string(s):
-    return HTMLParser().unescape(re.sub('<[^<]+?>', '', s.replace("\n"," ").encode('utf8','replace')))
+    return html.unescape(re.sub('<[^<]+?>', ' ', re.sub('</p>', '. ', s.replace("\n"," "))))
+
+
+def line_to_ssml(s):
+  sent_detector = nltk.data.load('tokenizers/punkt/dutch.pickle')
+  sentences = sent_detector.tokenize(s.strip())
+  speak = etree.Element('speak')
+  for sentence in sentences:
+    s = etree.Element('s')
+    s.text = sentence
+    speak.append(s)
+  return etree.tostring(speak, encoding='unicode', method='xml')
 
 
 def line_in_list_fuzzy_ratio(line,list_of_lines):
