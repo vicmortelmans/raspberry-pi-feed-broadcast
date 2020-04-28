@@ -1,42 +1,55 @@
 #!/usr/bin/python3
-import feedparser
-import time
-import sys
-from google.cloud import texttospeech
-import os
-import argparse
-from gpiozero import Button
-from signal import pause
-import threading
-import re
-from html.parser import HTMLParser
-import html
-import codecs
 from fuzzywuzzy import fuzz
-import nltk.data
+from google.cloud import texttospeech
+from gpiozero import Button
+from html.parser import HTMLParser
+from logging import handlers
+from logging.handlers import RotatingFileHandler
 from lxml import etree
+from signal import pause
+import argparse
+import codecs
+import feedparser
+import html
+import logging
+import nltk.data
+import os
+import re
 import sys
+import sys
+import threading
+import time
 
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 url_angelus = "https://www.bijbelcitaat.be/feed/"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
+
+# touch db_news
 if not os.path.exists(db_news):
   codecs.open(db_news, 'a', 'utf8').close()
 
 DEBUG = True
 
-# Initiate the parser
+#setup logging
+logger = logging.getLogger('')
+logger.setLevel(logging.DEBUG)
+format = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+ch = logging.StreamHandler(sys.stdout)
+ch.setFormatter(format)
+logger.addHandler(ch)
+fh = handlers.RotatingFileHandler("get_news.log", maxBytes=(1048576*5), backupCount=7)
+fh.setFormatter(format)
+logger.addHandler(fh)
+logger.info("Starting get_news.py")
+
+# Initiate the command line parser
 parser = argparse.ArgumentParser()
-
-# Add long and short argument
 parser.add_argument("--silent", "-s", action="store_true", help="Don't play sound, only print out.")
-
-# Read arguments from the command line
 args = parser.parse_args()
 
-# Instantiates a client
+# Instantiates a Google TTS client
 if not args.silent:
   client = texttospeech.TextToSpeechClient()
 
@@ -51,7 +64,7 @@ button_mute = Button(21)
 
 broadcast_mute = False
  
-
+# Decorator for threaded functions
 def threaded(fn):
     def wrapper(*args, **kwargs):
         thread = threading.Thread(target=fn, args=args, kwargs=kwargs)
@@ -61,6 +74,7 @@ def threaded(fn):
 
 
 def main():
+
   # Configure event handlers
   button_backward.when_released = one_minute_backward
   button_backward.when_held = ten_minutes_backward
@@ -87,15 +101,15 @@ def schedule_calibration():
   global pending_calibration
   if pending_calibration: 
     pending_calibration.cancel()
-    if DEBUG: sys.stderr.write("Canceled a pending calibration\n")
+    if DEBUG: logger.info("Canceled a pending calibration")
   pending_calibration = threading.Timer(10.0, calibrate)
   pending_calibration.start()
-  if DEBUG: sys.stderr.write("Scheduled a calibration\n")
+  if DEBUG: logger.info("Scheduled a calibration")
 
 
 def calibrate():
   klok_lock.acquire()
-  if DEBUG: sys.stderr.write("Going to calibrate the clock\n")
+  if DEBUG: logger.info("Going to calibrate the clock")
   os.system('python /home/pi/Public/klok/klok_calibrate.py')
   klok_lock.release()
 
@@ -104,7 +118,7 @@ def calibrate():
 def one_minute_backward():
   if not button_backward.was_held:
     klok_lock.acquire()
-    if DEBUG: sys.stderr.write("Going one minute backward\n")
+    if DEBUG: logger.info("Going one minute backward")
     os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
     schedule_calibration()
     klok_lock.release()
@@ -115,7 +129,7 @@ def one_minute_backward():
 def ten_minutes_backward():
   button_backward.was_held = True
   klok_lock.acquire()
-  if DEBUG: sys.stderr.write("Going ten minutes backward\n")
+  if DEBUG: logger.info("Going ten minutes backward")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
   schedule_calibration()
   klok_lock.release()
@@ -125,7 +139,7 @@ def ten_minutes_backward():
 def one_minute_forward():
   if not button_forward.was_held:
     klok_lock.acquire()
-    if DEBUG: sys.stderr.write("Going one minute forward\n")
+    if DEBUG: logger.info("Going one minute forward")
     os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
     schedule_calibration()
     klok_lock.release()
@@ -136,7 +150,7 @@ def one_minute_forward():
 def ten_minutes_forward():
   button_forward.was_held = True
   klok_lock.acquire()
-  if DEBUG: sys.stderr.write("Going ten minutes forward\n")
+  if DEBUG: logger.info("Going ten minutes forward")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
   schedule_calibration()
   klok_lock.release()
@@ -144,14 +158,14 @@ def ten_minutes_forward():
 
 def read_latest_item():
   if not button_play.was_held:
-      if DEBUG: sys.stderr.write("Going to read\n")
+      if DEBUG: logger.info("Going to read")
       if not switch_play_news_or_angelus.is_pressed: 
-        if DEBUG: sys.stderr.write("Going to read angelus\n")
+        if DEBUG: logger.info("Going to read angelus")
         items = get_first_items_from_live_feed(url_angelus, 2)
         lines = extract_titles_and_contents(items)
         broadcast(lines, tune_angelus)
       else:
-        if DEBUG: sys.stderr.write("Going to read news\n")
+        if DEBUG: logger.info("Going to read news")
         lines = get_first_lines_from_db(db_news, 1)
         broadcast(lines, tune_news)
   button_play.was_held = False
@@ -159,21 +173,21 @@ def read_latest_item():
 
 def read_latest_5_items():
   button_play.was_held = True
-  if DEBUG: sys.stderr.write("Going to read a lot\n")
+  if DEBUG: logger.info("Going to read a lot")
   if not switch_play_news_or_angelus.is_pressed: 
-    if DEBUG: sys.stderr.write("Going to read angelus\n")
+    if DEBUG: logger.info("Going to read angelus")
     items = get_first_items_from_live_feed(url_angelus, 2)
     lines = extract_tiles_and_contents(items)
     broadcast(lines, tune_angelus)
   else:
-    if DEBUG: sys.stderr.write("Going to read a lot of news\n")
+    if DEBUG: logger.info("Going to read a lot of news")
     lines = get_first_lines_from_db(db_news, 5)
     broadcast(lines, tune_news)
 
 
 def kill_playing_broadcasts():
   global broadcast_mute
-  if DEBUG: sys.stderr.write("Stop reading\n")
+  if DEBUG: logger.info("Stop reading")
   broadcast_mute = True
   os.system('killall omxplayer.bin')
   if DEBUG: 
@@ -234,7 +248,7 @@ def news():
   # The database is rewritten with new lines first and then the old lines.
   # New lines are broadcasted.
 
-  if DEBUG: sys.stderr.write("Fetching news started\n")
+  if DEBUG: logger.info("Fetching news started")
 
   items = []
   for url in urls_news:
@@ -243,7 +257,7 @@ def news():
     
   lines = extract_titles_and_descriptions(items)
 
-  if DEBUG: sys.stderr.write("Fetched lines: " + str(len(lines)) + "\n")
+  if DEBUG: logger.info("Fetched lines: " + str(len(lines)) + "")
 
   db_lines = []
   with codecs.open(db_news, 'r', 'utf8') as database:
@@ -258,10 +272,10 @@ def news():
     if fuzzy_ratio < 90:
       new_lines.append(line)
     elif fuzzy_ratio < 100:
-      if DEBUG: sys.stderr.write("Updated line: " + line + "\n")
+      if DEBUG: logger.info("Updated line: " + line + "")
       old_lines.append(line)
 
-  if DEBUG: sys.stderr.write("Fetched new lines: " + str(len(new_lines)) + "\n")
+  if DEBUG: logger.info("Fetched new lines: " + str(len(new_lines)) + "")
 
   if len(new_lines):
 
@@ -269,7 +283,7 @@ def news():
         if db_line in lines:
           old_lines.append(db_line)
 
-      if DEBUG: sys.stderr.write("Kept old lines: " + str(len(old_lines)) + "\n")
+      if DEBUG: logger.info("Kept old lines: " + str(len(old_lines)) + "")
 
       # add all the posts to the database (new posts first)
       f = codecs.open(db_news, 'w', 'utf8')
@@ -279,7 +293,7 @@ def news():
           
       # output all of the new posts
       if switch_news.is_pressed:
-        if DEBUG: sys.stderr.write("Going to read new lines: " + str(len(new_lines)) + "\n")
+        if DEBUG: logger.info("Going to read new lines: " + str(len(new_lines)) + "")
         broadcast(new_lines, tune_news)
 
   # set a timer to run news() again in 5 minutes
@@ -305,7 +319,7 @@ def broadcast(lines, tune):
 def broadcast_thread(lines, tune):
   global broadcast_mute
 
-  if DEBUG: sys.stderr.write("Broadcasting started\n")
+  if DEBUG: logger.info("Broadcasting started")
 
   broadcast_lock.acquire()
 
@@ -316,7 +330,7 @@ def broadcast_thread(lines, tune):
       # Set the text input to be synthesized
       ssml = line_to_ssml(line)
 #      import pdb; pdb.set_trace()
-      if DEBUG: sys.stderr.write("SSML formatted line: " + ssml + "\n")
+      if DEBUG: logger.info("SSML formatted line: " + ssml + "")
       synthesis_input = texttospeech.types.SynthesisInput(ssml=ssml)
 
       # Build the voice request, select the language code ("en-US") and the ssml
@@ -345,13 +359,13 @@ def broadcast_thread(lines, tune):
     if not args.silent:
       # Play the announcement tune
       if tune and not broadcast_mute:
-        if DEBUG: sys.stderr.write("Playing tune: " + tune + "\n")
+        if DEBUG: logger.info("Playing tune: " + tune + "")
         os.system("omxplayer " + tune)
 
       for num, line in enumerate(lines):
         # Play the audio file
         if not broadcast_mute:
-          if DEBUG: sys.stderr.write("Playing audio for line: " + line + "\n")
+          if DEBUG: logger.info("Playing audio for line: " + line + "")
           os.system("omxplayer output" + str(num) + ".mp3")
     else:
       if DEBUG:
@@ -362,7 +376,7 @@ def broadcast_thread(lines, tune):
   broadcast_mute = False
   broadcast_lock.release()
 
-  if DEBUG: sys.stderr.write("Broadcasting done\n")
+  if DEBUG: logger.info("Broadcasting done")
 
   return
 
