@@ -1,18 +1,13 @@
 #!/usr/bin/python3
-from fuzzywuzzy import fuzz
 from google.cloud import texttospeech
 from gpiozero import Button
-from html.parser import HTMLParser
 from logging import handlers
 from logging.handlers import RotatingFileHandler
-from lxml import etree
 from signal import pause
 import argparse
 import codecs
 import feedparser
-import html
 import logging
-import nltk.data
 import os
 import re
 import sys
@@ -21,7 +16,6 @@ import threading
 import time
 
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
-url_angelus = "https://www.bijbelcitaat.be/feed/"
 status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embed.php"
 stream_koningsoord = "http://source.audio.true.nl:8000/abdijkoningsoord"
 tune_news = "pips.ogg"
@@ -60,7 +54,7 @@ Button.was_held = False
 button_backward = Button(20)
 button_forward = Button(26)
 switch_news = Button(13)
-switch_play_news_or_angelus = Button(19)
+switch_getijden = Button(19)
 button_play = Button(16)
 button_mute = Button(21)
 
@@ -82,12 +76,17 @@ def main():
   button_backward.when_held = ten_minutes_backward
   button_forward.when_released = one_minute_forward
   button_forward.when_held = ten_minutes_forward
+  switch_getijden.when_pressed = play_getijden
+  switch_getijden.when_released = stop_playing_getijden
   button_play.when_released = read_latest_item
   button_play.when_held = read_latest_5_items
   button_mute.when_pressed = kill_playing_broadcasts
   
   # Start polling the news feeds
   news()
+
+  # Start polling getijden
+  getijden()
 
   # Wait for things to happen
   pause()
@@ -163,6 +162,31 @@ def ten_minutes_forward():
   klok_lock.release()
 
 
+def play_getijden():
+  global getijden_playing
+  if not getijden_playing:
+    logger.info("[BUTTON] Play getijden")
+    status = fetch_h1(status_koningsoord)
+    if "gestart" in status:
+      broadcast([status], tune_angelus)
+      broadcast_getijden(stream_koningsoord) 
+    else:
+      broadcast([status], None)
+  else:
+    logger.info("[BUTTON] Play getijden, but already playing. Strange...")
+
+def announce_getijden():
+  broadcast([], tune_angelus)
+
+def stop_playing_getijden():
+  global getijden_playing
+  if getijden_playing:
+    logger.info("[BUTTON] Stop getijden")
+    os.system('killall omxplayer.bin')
+  else:
+    logger.info("[BUTTON] Stop getijden, but not playing, so doing nothing")
+
+
 def read_latest_item():
   if not button_play.was_held:
     # it's been noticed in the logs that the broadcasting thread got stuck somehow and the
@@ -172,15 +196,9 @@ def read_latest_item():
 #    logger.info("Broadcasting lock released by pushing READ button")
     # processing request
     logger.info("[BUTTON] Going to read")
-    if not switch_play_news_or_angelus.is_pressed: 
-      logger.info("Going to read angelus")
-      items = get_first_items_from_live_feed(url_angelus, 2)
-      lines = extract_titles_and_contents(items)
-      broadcast(lines, tune_angelus)
-    else:
-      logger.info("Going to read news")
-      lines = get_first_lines_from_db(db_news, 1)
-      broadcast(lines, tune_news)
+    logger.info("Going to read news")
+    lines = get_first_lines_from_db(db_news, 1)
+    broadcast(lines, tune_news)
   button_play.was_held = False
 
 
@@ -193,15 +211,9 @@ def read_latest_5_items():
   logger.info("Broadcasting lock released by pushing READ button")
   # processing request
   logger.info("[BUTTON] Going to read a lot")
-  if not switch_play_news_or_angelus.is_pressed: 
-    logger.info("Going to read angelus")
-    items = get_first_items_from_live_feed(url_angelus, 2)
-    lines = extract_tiles_and_contents(items)
-    broadcast(lines, tune_angelus)
-  else:
-    logger.info("Going to read a lot of news")
-    lines = get_first_lines_from_db(db_news, 5)
-    broadcast(lines, tune_news)
+  logger.info("Going to read a lot of news")
+  lines = get_first_lines_from_db(db_news, 5)
+  broadcast(lines, tune_news)
 
 
 def kill_playing_broadcasts():
@@ -258,12 +270,51 @@ def extract_titles_and_contents(items):
 # Background functions
 #
 
+getijden_playing = False
+getijden_annouced = False
+
 def getijden():
 
-  # This function runs in the background every five minutes. It reads the status_koningsoord.
-  # If they're streaming AND the 
+  global getijden_playing
+  global getijden_announced
 
-  pass
+  # This function runs in the background every five minutes. It reads the status_koningsoord.
+  # If they're streaming AND the switch is enabled, it starts an omxplayer with the stream
+  # In the meanwhile, it keeps polling, because if the streaming ends, the omxplayer must
+  # be killed.
+
+  logger.info("Polling getijden started")
+
+  status = fetch_h1(status_koningsoord)
+  if getijden_playing:
+    if "gestart" in status:
+      logger.info("Getijden are playing and still live... just go on playing")
+      pass  # continue playing
+    else:  
+      logger.info("Getijden are playing but no longer live... stop playing")
+      stop_playing_getijden()
+      getijden_announced = False
+  else: # not getijden_playing
+    if "gestart" in status:
+      if switch_getijden.is_pressed:
+        logger.info("Getijden are going live and switch is on... start playing")
+        start_playing_getijden()
+      else:
+        if getijden_announced:
+          logger.info("Getijden are going live but switch is off and already announced...")
+        else:
+          announce_getijden()
+          getijden_announced = True
+    else:
+      logger.info("Getijden are not live.")
+      getijden_announced = False
+
+  # set a timer to run news() again in 5 minutes
+  if DEBUG:
+    interval = 30.0
+  else:
+    interval = 300.0
+  threading.Timer(interval, getijden).start()
 
 
 def news():
@@ -300,7 +351,7 @@ def news():
     if fuzzy_ratio < 90:
       new_lines.append(line)
     elif fuzzy_ratio < 100:
-      logger.info("Updated line: " + line + "")
+      logger.info("Slightly updated line that will be ignored: " + line + "")
       old_lines.append(line)
 
   logger.info("Fetched new lines: " + str(len(new_lines)) + "")
@@ -340,13 +391,8 @@ def news():
 
 broadcast_lock = threading.Lock()
 
+@threaded
 def broadcast(lines, tune):
-  thread = threading.Thread(target = broadcast_thread, args = (lines, tune))
-  thread.start()
-  return
-
-
-def broadcast_thread(lines, tune):
   global broadcast_mute
 
   logger.info("Broadcasting started")
@@ -355,13 +401,14 @@ def broadcast_thread(lines, tune):
   broadcast_lock.acquire()
   logger.info("Broadcasting lock acquired")
 
-  for num, line in enumerate(lines):
-    if not args.silent:
+  if not args.silent:
+
+    for num, line in enumerate(lines):
       line_to_numbered_audio(line, num)
       
-  # run through all audio for this session; not that it's important to 
-  # keep checking broadcast_mute, as it can be set by an event outside of this loop!
-  if not args.silent:
+    # run through all audio for this session; not that it's important to 
+    # keep checking broadcast_mute, as it can be set by an event outside of this loop!
+
     # Play the announcement tune
     if tune and not broadcast_mute:
       logger.info("Playing tune: " + tune + "")
@@ -374,7 +421,9 @@ def broadcast_thread(lines, tune):
         os.system("omxplayer --no-keys --no-osd output" + str(num) + ".mp3")
       else:
         logger.info("broadcast_mute is True - not Playing audio for line: " + line + " from output" + str(num) + ".mp3")
+
   else:  # args.silent requested
+
     if DEBUG:
       for line in lines:
         if not broadcast_mute:
@@ -388,6 +437,31 @@ def broadcast_thread(lines, tune):
   logger.info("Broadcasting lock released")
 
   logger.info("Broadcasting done")
+
+  return
+
+
+@threaded
+def broadcast_getijden(stream):
+  global getijden_playing
+
+  getijden_playing = True
+  logger.info("Broadcasting getijden started")
+
+  logger.info("Broadcasting getijden waiting for lock...")
+  broadcast_lock.acquire()
+  logger.info("Broadcasting lock acquired for getijden")
+
+  if not args.silent:
+  
+      logger.info("Playing stream: " + stream + "")
+      os.system("omxplayer --no-keys --no-osd --live " + stream)
+
+  broadcast_lock.release()
+  logger.info("Broadcasting lock released for getijden")
+
+  getijden_playing = False
+  logger.info("Broadcasting getijden done")
 
   return
 
@@ -432,25 +506,28 @@ def line_to_numbered_audio(line, num):
 #
 
 def slugify(value):
-    """
-    Normalizes string, converts to lowercase, removes non-alpha characters
-    (except dot, to  make sure the file extension is kept),
-    and converts spaces to hyphens.
-    """
-    import unicodedata
-    import re
-    value = value
-    value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore')
-    value = re.sub('[^\w\s.-]', '', value).strip().lower()
-    value = re.sub('[-\s]+', '-', value)
-    return value
+  """
+  Normalizes string, converts to lowercase, removes non-alpha characters
+  (except dot, to  make sure the file extension is kept),
+  and converts spaces to hyphens.
+  """
+  import unicodedata
+  import re
+  value = value
+  value = unicodedata.normalize('NFKD', value).encode('ascii', 'ignore')
+  value = re.sub('[^\w\s.-]', '', value).strip().lower()
+  value = re.sub('[-\s]+', '-', value)
+  return value
 
 
 def clean_string(s):
-    return html.unescape(re.sub('<[^<]+?>', ' ', re.sub('</p>', '. ', s.replace("\n"," "))))
+  import html
+  return html.unescape(re.sub('<[^<]+?>', ' ', re.sub('</p>', '. ', s.replace("\n"," "))))
 
 
 def line_to_ssml(s):
+  import nltk.data
+  from lxml import etree
   sent_detector = nltk.data.load('tokenizers/punkt/dutch.pickle')
   sentences = sent_detector.tokenize(s.strip())
   speak = etree.Element('speak')
@@ -462,10 +539,19 @@ def line_to_ssml(s):
 
 
 def line_in_list_fuzzy_ratio(line,list_of_lines):
-    m = 0
-    for l in list_of_lines:
-        m = max(m, fuzz.ratio(line.lower(), l.lower()))
-    return m
+  from fuzzywuzzy import fuzz
+  m = 0
+  for l in list_of_lines:
+    m = max(m, fuzz.ratio(line.lower(), l.lower()))
+  return m
+
+
+def fetch_h1(url):
+  from urllib.request import urlopen
+  from bs4 import BeautifulSoup
+  html = urlopen(url)
+  bsh = BeautifulSoup(html.read(), 'html.parser')
+  return bsh.h1.text
 
 
 if __name__ == '__main__':
