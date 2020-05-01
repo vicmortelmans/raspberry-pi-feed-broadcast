@@ -22,6 +22,8 @@ import time
 
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 url_angelus = "https://www.bijbelcitaat.be/feed/"
+status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embed.php"
+stream_koningsoord = "http://source.audio.true.nl:8000/abdijkoningsoord"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
@@ -101,15 +103,16 @@ def schedule_calibration():
   global pending_calibration
   if pending_calibration: 
     pending_calibration.cancel()
-    if DEBUG: logger.info("Canceled a pending calibration")
+    logger.info("Canceled a pending calibration")
   pending_calibration = threading.Timer(10.0, calibrate)
   pending_calibration.start()
-  if DEBUG: logger.info("Scheduled a calibration")
+  logger.info("Scheduled a calibration")
 
 
 def calibrate():
+  logger.info("Acquiring the klok_lock...")
   klok_lock.acquire()
-  if DEBUG: logger.info("Going to calibrate the clock")
+  logger.info("Going to calibrate the clock")
   os.system('python /home/pi/Public/klok/klok_calibrate.py')
   klok_lock.release()
 
@@ -117,8 +120,9 @@ def calibrate():
 @threaded
 def one_minute_backward():
   if not button_backward.was_held:
+    logger.info("Acquiring the klok_lock...")
     klok_lock.acquire()
-    if DEBUG: logger.info("Going one minute backward")
+    logger.info("[BUTTON] Going one minute backward")
     os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
     schedule_calibration()
     klok_lock.release()
@@ -128,8 +132,9 @@ def one_minute_backward():
 @threaded
 def ten_minutes_backward():
   button_backward.was_held = True
+  logger.info("Acquiring the klok_lock...")
   klok_lock.acquire()
-  if DEBUG: logger.info("Going ten minutes backward")
+  logger.info("[BUTTON] Going ten minutes backward")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
   schedule_calibration()
   klok_lock.release()
@@ -138,8 +143,9 @@ def ten_minutes_backward():
 @threaded
 def one_minute_forward():
   if not button_forward.was_held:
+    logger.info("Acquiring the klok_lock...")
     klok_lock.acquire()
-    if DEBUG: logger.info("Going one minute forward")
+    logger.info("[BUTTON] Going one minute forward")
     os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
     schedule_calibration()
     klok_lock.release()
@@ -149,8 +155,9 @@ def one_minute_forward():
 @threaded
 def ten_minutes_forward():
   button_forward.was_held = True
+  logger.info("Acquiring the klok_lock...")
   klok_lock.acquire()
-  if DEBUG: logger.info("Going ten minutes forward")
+  logger.info("[BUTTON] Going ten minutes forward")
   os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
   schedule_calibration()
   klok_lock.release()
@@ -158,36 +165,49 @@ def ten_minutes_forward():
 
 def read_latest_item():
   if not button_play.was_held:
-      if DEBUG: logger.info("Going to read")
-      if not switch_play_news_or_angelus.is_pressed: 
-        if DEBUG: logger.info("Going to read angelus")
-        items = get_first_items_from_live_feed(url_angelus, 2)
-        lines = extract_titles_and_contents(items)
-        broadcast(lines, tune_angelus)
-      else:
-        if DEBUG: logger.info("Going to read news")
-        lines = get_first_lines_from_db(db_news, 1)
-        broadcast(lines, tune_news)
+    # it's been noticed in the logs that the broadcasting thread got stuck somehow and the
+    # lock wouldn't be released. Let's assume that the user doesn't push this button during
+    # a broadcast, and just release the lock to be safe.
+#    broadcast_lock.release()
+#    logger.info("Broadcasting lock released by pushing READ button")
+    # processing request
+    logger.info("[BUTTON] Going to read")
+    if not switch_play_news_or_angelus.is_pressed: 
+      logger.info("Going to read angelus")
+      items = get_first_items_from_live_feed(url_angelus, 2)
+      lines = extract_titles_and_contents(items)
+      broadcast(lines, tune_angelus)
+    else:
+      logger.info("Going to read news")
+      lines = get_first_lines_from_db(db_news, 1)
+      broadcast(lines, tune_news)
   button_play.was_held = False
 
 
 def read_latest_5_items():
   button_play.was_held = True
-  if DEBUG: logger.info("Going to read a lot")
+  # it's been noticed in the logs that the broadcasting thread got stuck somehow and the
+  # lock wouldn't be released. Let's assume that the user doesn't push this button during
+  # a broadcast, and just release the lock to be safe.
+  broadcast_lock.release()
+  logger.info("Broadcasting lock released by pushing READ button")
+  # processing request
+  logger.info("[BUTTON] Going to read a lot")
   if not switch_play_news_or_angelus.is_pressed: 
-    if DEBUG: logger.info("Going to read angelus")
+    logger.info("Going to read angelus")
     items = get_first_items_from_live_feed(url_angelus, 2)
     lines = extract_tiles_and_contents(items)
     broadcast(lines, tune_angelus)
   else:
-    if DEBUG: logger.info("Going to read a lot of news")
+    logger.info("Going to read a lot of news")
     lines = get_first_lines_from_db(db_news, 5)
     broadcast(lines, tune_news)
 
 
 def kill_playing_broadcasts():
   global broadcast_mute
-  if DEBUG: logger.info("Stop reading")
+  logger.info("[BUTTON] Stop reading")
+  logger.info("Set broadcast_mute to True")
   broadcast_mute = True
   os.system('killall omxplayer.bin')
   if DEBUG: 
@@ -238,6 +258,14 @@ def extract_titles_and_contents(items):
 # Background functions
 #
 
+def getijden():
+
+  # This function runs in the background every five minutes. It reads the status_koningsoord.
+  # If they're streaming AND the 
+
+  pass
+
+
 def news():
 
   # This function runs in the background every five minutes. It reads a number of 
@@ -248,7 +276,7 @@ def news():
   # The database is rewritten with new lines first and then the old lines.
   # New lines are broadcasted.
 
-  if DEBUG: logger.info("Fetching news started")
+  logger.info("Fetching news started")
 
   items = []
   for url in urls_news:
@@ -257,7 +285,7 @@ def news():
     
   lines = extract_titles_and_descriptions(items)
 
-  if DEBUG: logger.info("Fetched lines: " + str(len(lines)) + "")
+  logger.info("Fetched lines: " + str(len(lines)) + "")
 
   db_lines = []
   with codecs.open(db_news, 'r', 'utf8') as database:
@@ -272,10 +300,10 @@ def news():
     if fuzzy_ratio < 90:
       new_lines.append(line)
     elif fuzzy_ratio < 100:
-      if DEBUG: logger.info("Updated line: " + line + "")
+      logger.info("Updated line: " + line + "")
       old_lines.append(line)
 
-  if DEBUG: logger.info("Fetched new lines: " + str(len(new_lines)) + "")
+  logger.info("Fetched new lines: " + str(len(new_lines)) + "")
 
   if len(new_lines):
 
@@ -283,7 +311,7 @@ def news():
         if db_line in lines:
           old_lines.append(db_line)
 
-      if DEBUG: logger.info("Kept old lines: " + str(len(old_lines)) + "")
+      logger.info("Kept old lines: " + str(len(old_lines)) + "")
 
       # add all the posts to the database (new posts first)
       f = codecs.open(db_news, 'w', 'utf8')
@@ -293,8 +321,10 @@ def news():
           
       # output all of the new posts
       if switch_news.is_pressed:
-        if DEBUG: logger.info("Going to read new lines: " + str(len(new_lines)) + "")
+        logger.info("Going to read new lines: " + str(len(new_lines)) + "")
         broadcast(new_lines, tune_news)
+      else:
+        logger.info("News reading switch is disabled")
 
   # set a timer to run news() again in 5 minutes
   if DEBUG:
@@ -319,66 +349,83 @@ def broadcast(lines, tune):
 def broadcast_thread(lines, tune):
   global broadcast_mute
 
-  if DEBUG: logger.info("Broadcasting started")
+  logger.info("Broadcasting started")
 
+  logger.info("Broadcasting waiting for lock...")
   broadcast_lock.acquire()
+  logger.info("Broadcasting lock acquired")
 
   for num, line in enumerate(lines):
-    print(line + "\n")
-
     if not args.silent:
-      # Set the text input to be synthesized
-      ssml = line_to_ssml(line)
-#      import pdb; pdb.set_trace()
-      if DEBUG: logger.info("SSML formatted line: " + ssml + "")
-      synthesis_input = texttospeech.types.SynthesisInput(ssml=ssml)
-
-      # Build the voice request, select the language code ("en-US") and the ssml
-      # voice gender ("neutral")
-      voice = texttospeech.types.VoiceSelectionParams(
-        language_code='nl-NL',
-        name='nl-NL-Wavenet-C',
-        ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE)
-
-      # Select the type of audio file you want returned
-      audio_config = texttospeech.types.AudioConfig(
-        audio_encoding=texttospeech.enums.AudioEncoding.MP3,
-        volume_gain_db=-1.0)
-
-      # Perform the text-to-speech request on the text input with the selected
-      # voice parameters and audio file type
-      response = client.synthesize_speech(synthesis_input, voice, audio_config)
-
-      # The response's audio_content is binary.
-      with open('output' + str(num) + '.mp3', 'wb') as out:
-        # Write the response to the output file.
-        out.write(response.audio_content)
-        print('Audio content written to file "output' + str(num) + '.mp3"')
+      line_to_numbered_audio(line, num)
       
-  if len(lines):
-    if not args.silent:
-      # Play the announcement tune
-      if tune and not broadcast_mute:
-        if DEBUG: logger.info("Playing tune: " + tune + "")
-        os.system("omxplayer " + tune)
+  # run through all audio for this session; not that it's important to 
+  # keep checking broadcast_mute, as it can be set by an event outside of this loop!
+  if not args.silent:
+    # Play the announcement tune
+    if tune and not broadcast_mute:
+      logger.info("Playing tune: " + tune + "")
+      os.system("omxplayer --no-keys --no-osd " + tune)
 
-      for num, line in enumerate(lines):
-        # Play the audio file
+    for num, line in enumerate(lines):
+      # Play the audio file
+      if not broadcast_mute:
+        logger.info("Playing audio for line: " + line + " from output" + str(num) + ".mp3")
+        os.system("omxplayer --no-keys --no-osd output" + str(num) + ".mp3")
+      else:
+        logger.info("broadcast_mute is True - not Playing audio for line: " + line + " from output" + str(num) + ".mp3")
+  else:  # args.silent requested
+    if DEBUG:
+      for line in lines:
         if not broadcast_mute:
-          if DEBUG: logger.info("Playing audio for line: " + line + "")
-          os.system("omxplayer output" + str(num) + ".mp3")
-    else:
-      if DEBUG:
-        for line in lines:
-          if not broadcast_mute:
-            os.system('echo "'+ line + '" | pv -L 20 -q')
+          os.system('echo "'+ line + '" | pv -L 20 -q')
 
-  broadcast_mute = False
+  if broadcast_mute:
+    broadcast_mute = False
+    logger.info("Set broadcast_mute to False")
+
   broadcast_lock.release()
+  logger.info("Broadcasting lock released")
 
-  if DEBUG: logger.info("Broadcasting done")
+  logger.info("Broadcasting done")
 
   return
+
+
+def line_to_numbered_audio(line, num):
+  # Set the text input to be synthesized
+  ssml = line_to_ssml(line)
+#      import pdb; pdb.set_trace()
+  logger.info("SSML formatted line: " + ssml + "")
+  logger.info("Going to SynthesisInput")
+  synthesis_input = texttospeech.types.SynthesisInput(ssml=ssml)
+
+  # Build the voice request, select the language code ("en-US") and the ssml
+  # voice gender ("neutral")
+  logger.info("Going to VoiceSelectionParams")
+  voice = texttospeech.types.VoiceSelectionParams(
+    language_code='nl-NL',
+    name='nl-NL-Wavenet-C',
+    ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE)
+
+  # Select the type of audio file you want returned
+  logger.info("Going to AudioConfig")
+  audio_config = texttospeech.types.AudioConfig(
+    audio_encoding=texttospeech.enums.AudioEncoding.MP3,
+    volume_gain_db=-1.0)
+
+  # Perform the text-to-speech request on the text input with the selected
+  # voice parameters and audio file type
+  logger.info("Going to synthesize_speech")
+  response = client.synthesize_speech(synthesis_input, voice, audio_config)
+
+  # The response's audio_content is binary.
+  logger.info("Going to write audio content to file")
+  with open('output' + str(num) + '.mp3', 'wb') as out:
+    # Write the response to the output file.
+    out.write(response.audio_content)
+    print('Audio content written to file output' + str(num) + '.mp3')
+
 
 #
 # Generic functions
