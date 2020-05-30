@@ -17,7 +17,7 @@ import time
 
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embed.php"
-stream_koningsoord = "http://source.audio.true.nl:8000/abdijkoningsoord"
+stream_koningsoord = "https://darkice.mx10.nl:8443/abdijkoningsoord"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
@@ -164,19 +164,32 @@ def ten_minutes_forward():
 
 def play_getijden():
   global getijden_playing
+  global getijden_status
   if not getijden_playing:
     logger.info("[BUTTON] Play getijden")
-    status = fetch_h1(status_koningsoord)
-    if "gestart" in status:
-      broadcast([status], tune_angelus)
+    if "gestart" in getijden_status:
+      broadcast([getijden_status], tune_angelus)
       broadcast_getijden(stream_koningsoord) 
     else:
-      broadcast([status], None)
+      broadcast([getijden_status], None)
   else:
     logger.info("[BUTTON] Play getijden, but already playing. Strange...")
 
 def announce_getijden():
   broadcast([], tune_angelus)
+
+def start_playing_getijden():
+  global getijden_playing
+  global getijden_status
+  if not getijden_playing:
+    logger.info("Play getijden")
+    if "gestart" in getijden_status:
+      broadcast([getijden_status], tune_angelus)
+      broadcast_getijden(stream_koningsoord) 
+    else:
+      broadcast([getijden_status], None)
+  else:
+    logger.info("[BUTTON] Play getijden, but already playing. Strange...")
 
 def stop_playing_getijden():
   global getijden_playing
@@ -207,8 +220,8 @@ def read_latest_5_items():
   # it's been noticed in the logs that the broadcasting thread got stuck somehow and the
   # lock wouldn't be released. Let's assume that the user doesn't push this button during
   # a broadcast, and just release the lock to be safe.
-  broadcast_lock.release()
-  logger.info("Broadcasting lock released by pushing READ button")
+#  broadcast_lock.release()
+#  logger.info("Broadcasting lock released by pushing READ button")
   # processing request
   logger.info("[BUTTON] Going to read a lot")
   logger.info("Going to read a lot of news")
@@ -272,11 +285,13 @@ def extract_titles_and_contents(items):
 
 getijden_playing = False
 getijden_annouced = False
+getijden_status = ""
 
 def getijden():
 
   global getijden_playing
   global getijden_announced
+  global getijden_status
 
   # This function runs in the background every five minutes. It reads the status_koningsoord.
   # If they're streaming AND the switch is enabled, it starts an omxplayer with the stream
@@ -285,9 +300,10 @@ def getijden():
 
   logger.info("Polling getijden started")
 
-  status = fetch_h1(status_koningsoord)
+  getijden_status = fetch_h1(status_koningsoord)
+  logger.info("getijden_status: " + getijden_status)
   if getijden_playing:
-    if "gestart" in status:
+    if "gestart" in getijden_status:
       logger.info("Getijden are playing and still live... just go on playing")
       pass  # continue playing
     else:  
@@ -295,7 +311,7 @@ def getijden():
       stop_playing_getijden()
       getijden_announced = False
   else: # not getijden_playing
-    if "gestart" in status:
+    if "gestart" in getijden_status:
       if switch_getijden.is_pressed:
         logger.info("Getijden are going live and switch is on... start playing")
         start_playing_getijden()
@@ -401,33 +417,37 @@ def broadcast(lines, tune):
   broadcast_lock.acquire()
   logger.info("Broadcasting lock acquired")
 
-  if not args.silent:
+  try:
+    if not args.silent:
 
-    for num, line in enumerate(lines):
-      line_to_numbered_audio(line, num)
-      
-    # run through all audio for this session; not that it's important to 
-    # keep checking broadcast_mute, as it can be set by an event outside of this loop!
+      for num, line in enumerate(lines):
+        line_to_numbered_audio(line, num)
+        
+      # run through all audio for this session; not that it's important to 
+      # keep checking broadcast_mute, as it can be set by an event outside of this loop!
 
-    # Play the announcement tune
-    if tune and not broadcast_mute:
-      logger.info("Playing tune: " + tune + "")
-      os.system("omxplayer --no-keys --no-osd " + tune)
+      # Play the announcement tune
+      if tune and not broadcast_mute:
+        logger.info("Playing tune: " + tune + "")
+        os.system("omxplayer --no-keys --no-osd " + tune)
 
-    for num, line in enumerate(lines):
-      # Play the audio file
-      if not broadcast_mute:
-        logger.info("Playing audio for line: " + line + " from output" + str(num) + ".mp3")
-        os.system("omxplayer --no-keys --no-osd output" + str(num) + ".mp3")
-      else:
-        logger.info("broadcast_mute is True - not Playing audio for line: " + line + " from output" + str(num) + ".mp3")
-
-  else:  # args.silent requested
-
-    if DEBUG:
-      for line in lines:
+      for num, line in enumerate(lines):
+        # Play the audio file
         if not broadcast_mute:
-          os.system('echo "'+ line + '" | pv -L 20 -q')
+          logger.info("Playing audio for line: " + line + " from output" + str(num) + ".mp3")
+          os.system("omxplayer --no-keys --no-osd output" + str(num) + ".mp3")
+        else:
+          logger.info("broadcast_mute is True - not Playing audio for line: " + line + " from output" + str(num) + ".mp3")
+
+    else:  # args.silent requested
+
+      if DEBUG:
+        for line in lines:
+          if not broadcast_mute:
+            os.system('echo "'+ line + '" | pv -L 20 -q')
+
+  except Exception as e:
+    logger.error("ERROR while broadcasting: " + str(e))
 
   if broadcast_mute:
     broadcast_mute = False
@@ -452,10 +472,14 @@ def broadcast_getijden(stream):
   broadcast_lock.acquire()
   logger.info("Broadcasting lock acquired for getijden")
 
-  if not args.silent:
-  
-      logger.info("Playing stream: " + stream + "")
-      os.system("omxplayer --no-keys --no-osd --live " + stream)
+  try:
+    if not args.silent:
+    
+        logger.info("Playing stream: " + stream + "")
+        os.system("omxplayer --no-keys --no-osd --live " + stream)
+
+  except Exception as e:
+    logger.error("ERROR while broadcasting getijden: " + str(e))
 
   broadcast_lock.release()
   logger.info("Broadcasting lock released for getijden")
