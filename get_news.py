@@ -300,30 +300,35 @@ def getijden():
 
   logger.info("Polling getijden started")
 
-  getijden_status = fetch_h1(status_koningsoord)
-  logger.info("getijden_status: " + getijden_status)
-  if getijden_playing:
-    if "gestart" in getijden_status:
-      logger.info("Getijden are playing and still live... just go on playing")
-      pass  # continue playing
-    else:  
-      logger.info("Getijden are playing but no longer live... stop playing")
-      stop_playing_getijden()
-      getijden_announced = False
-  else: # not getijden_playing
-    if "gestart" in getijden_status:
-      if switch_getijden.is_pressed:
-        logger.info("Getijden are going live and switch is on... start playing")
-        start_playing_getijden()
-      else:
-        if getijden_announced:
-          logger.info("Getijden are going live but switch is off and already announced...")
+  try:
+
+    getijden_status = fetch_h1(status_koningsoord)
+    logger.info("getijden_status: " + getijden_status)
+    if getijden_playing:
+      if "gestart" in getijden_status:
+        logger.info("Getijden are playing and still live... just go on playing")
+        pass  # continue playing
+      else:  
+        logger.info("Getijden are playing but no longer live... stop playing")
+        stop_playing_getijden()
+        getijden_announced = False
+    else: # not getijden_playing
+      if "gestart" in getijden_status:
+        if switch_getijden.is_pressed:
+          logger.info("Getijden are going live and switch is on... start playing")
+          start_playing_getijden()
         else:
-          announce_getijden()
-          getijden_announced = True
-    else:
-      logger.info("Getijden are not live.")
-      getijden_announced = False
+          if getijden_announced:
+            logger.info("Getijden are going live but switch is off and already announced...")
+          else:
+            announce_getijden()
+            getijden_announced = True
+      else:
+        logger.info("Getijden are not live.")
+        getijden_announced = False
+
+  except Exception as e:
+    logger.error("ERROR while polling getijden: " + str(e))
 
   # set a timer to run news() again in 5 minutes
   if DEBUG:
