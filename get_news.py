@@ -26,7 +26,7 @@ db_news = "news.db"
 if not os.path.exists(db_news):
   codecs.open(db_news, 'a', 'utf8').close()
 
-DEBUG = True
+DEBUG = False
 
 #setup logging
 logger = logging.getLogger('')
