@@ -501,26 +501,26 @@ def line_to_numbered_audio(line, num):
 #      import pdb; pdb.set_trace()
   logger.info("SSML formatted line: " + ssml + "")
   logger.info("Going to SynthesisInput")
-  synthesis_input = texttospeech.types.SynthesisInput(ssml=ssml)
+  synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
 
   # Build the voice request, select the language code ("en-US") and the ssml
   # voice gender ("neutral")
   logger.info("Going to VoiceSelectionParams")
-  voice = texttospeech.types.VoiceSelectionParams(
+  voice = texttospeech.VoiceSelectionParams(
     language_code='nl-NL',
     name='nl-NL-Wavenet-C',
-    ssml_gender=texttospeech.enums.SsmlVoiceGender.MALE)
+    ssml_gender=texttospeech.SsmlVoiceGender.MALE)
 
   # Select the type of audio file you want returned
   logger.info("Going to AudioConfig")
-  audio_config = texttospeech.types.AudioConfig(
-    audio_encoding=texttospeech.enums.AudioEncoding.MP3,
+  audio_config = texttospeech.AudioConfig(
+    audio_encoding=texttospeech.AudioEncoding.MP3,
     volume_gain_db=-1.0)
 
   # Perform the text-to-speech request on the text input with the selected
   # voice parameters and audio file type
   logger.info("Going to synthesize_speech")
-  response = client.synthesize_speech(synthesis_input, voice, audio_config)
+  response = client.synthesize_speech(input=synthesis_input, voice=voice, audio_config=audio_config)
 
   # The response's audio_content is binary.
   logger.info("Going to write audio content to file")
