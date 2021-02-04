@@ -14,6 +14,7 @@ import sys
 import sys
 import threading
 import time
+import json
 
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embed.php"
@@ -21,6 +22,9 @@ stream_koningsoord = "https://darkice.mx10.nl:8443/abdijkoningsoord"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
+with open('bomans.json') as f:
+    bomans = json.load(f)
+
 
 # touch db_news
 if not os.path.exists(db_news):
@@ -51,8 +55,10 @@ if not args.silent:
 
 # Define the buttons
 Button.was_held = False
-button_backward = Button(20)
-button_forward = Button(26)
+#button_backward = Button(20)
+button_bomans = Button(20)
+#button_forward = Button(26)
+button_weather = Button(26)
 switch_news = Button(13)
 switch_getijden = Button(19)
 button_play = Button(16)
@@ -72,10 +78,13 @@ def threaded(fn):
 def main():
 
   # Configure event handlers
-  button_backward.when_released = one_minute_backward
-  button_backward.when_held = ten_minutes_backward
-  button_forward.when_released = one_minute_forward
-  button_forward.when_held = ten_minutes_forward
+#  button_backward.when_released = one_minute_backward
+#  button_backward.when_held = ten_minutes_backward
+  button_bomans.when_released = read_bomans
+#  button_forward.when_released = one_minute_forward
+#  button_forward.when_held = ten_minutes_forward
+  button_weather.when_released = read_weather_now
+  button_weather.when_held = read_weather_later
   switch_getijden.when_pressed = play_getijden
   switch_getijden.when_released = stop_playing_getijden
   button_play.when_released = read_latest_item
@@ -116,50 +125,50 @@ def calibrate():
   klok_lock.release()
 
 
-@threaded
-def one_minute_backward():
-  if not button_backward.was_held:
-    logger.info("Acquiring the klok_lock...")
-    klok_lock.acquire()
-    logger.info("[BUTTON] Going one minute backward")
-    os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
-    schedule_calibration()
-    klok_lock.release()
-  button_backward.was_held = False
+#@threaded
+#def one_minute_backward():
+#  if not button_backward.was_held:
+#    logger.info("Acquiring the klok_lock...")
+#    klok_lock.acquire()
+#    logger.info("[BUTTON] Going one minute backward")
+#    os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
+#    schedule_calibration()
+#    klok_lock.release()
+#  button_backward.was_held = False
 
 
-@threaded
-def ten_minutes_backward():
-  button_backward.was_held = True
-  logger.info("Acquiring the klok_lock...")
-  klok_lock.acquire()
-  logger.info("[BUTTON] Going ten minutes backward")
-  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
-  schedule_calibration()
-  klok_lock.release()
+#@threaded
+#def ten_minutes_backward():
+#  button_backward.was_held = True
+#  logger.info("Acquiring the klok_lock...")
+#  klok_lock.acquire()
+#  logger.info("[BUTTON] Going ten minutes backward")
+#  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
+#  schedule_calibration()
+#  klok_lock.release()
 
 
-@threaded
-def one_minute_forward():
-  if not button_forward.was_held:
-    logger.info("Acquiring the klok_lock...")
-    klok_lock.acquire()
-    logger.info("[BUTTON] Going one minute forward")
-    os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
-    schedule_calibration()
-    klok_lock.release()
-  button_forward.was_held = False
+#@threaded
+#def one_minute_forward():
+#  if not button_forward.was_held:
+#    logger.info("Acquiring the klok_lock...")
+#    klok_lock.acquire()
+#    logger.info("[BUTTON] Going one minute forward")
+#    os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
+#    schedule_calibration()
+#    klok_lock.release()
+#  button_forward.was_held = False
 
 
-@threaded
-def ten_minutes_forward():
-  button_forward.was_held = True
-  logger.info("Acquiring the klok_lock...")
-  klok_lock.acquire()
-  logger.info("[BUTTON] Going ten minutes forward")
-  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
-  schedule_calibration()
-  klok_lock.release()
+#@threaded
+#def ten_minutes_forward():
+#  button_forward.was_held = True
+#  logger.info("Acquiring the klok_lock...")
+#  klok_lock.acquire()
+#  logger.info("[BUTTON] Going ten minutes forward")
+#  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
+#  schedule_calibration()
+#  klok_lock.release()
 
 
 def play_getijden():
@@ -198,6 +207,30 @@ def stop_playing_getijden():
     os.system('killall omxplayer.bin')
   else:
     logger.info("[BUTTON] Stop getijden, but not playing, so doing nothing")
+
+
+def read_bomans():
+    logger.info("[BUTTON] Going to read")
+    logger.info("Going to read Bomans")
+    quote = get_random_bomans_quote()
+    broadcast([quote], None)
+
+
+def read_weather_now():
+  if not button_weather.was_held:
+    logger.info("[BUTTON] Going read")
+    logger.info("Going to read weather now")
+    weather = get_weather_now()
+    broadcast([weather], None)
+  button_weather.was_held = False
+
+
+def read_weather_later():
+    button_weather.was_held = True
+    logger.info("[BUTTON] Going to read")
+    logger.info("Going to read weather later")
+    weather = get_weather_later()
+    broadcast([weather], None)
 
 
 def read_latest_item():
@@ -515,6 +548,7 @@ def line_to_numbered_audio(line, num):
   logger.info("Going to AudioConfig")
   audio_config = texttospeech.AudioConfig(
     audio_encoding=texttospeech.AudioEncoding.MP3,
+    speaking_rate=0.8,
     volume_gain_db=-1.0)
 
   # Perform the text-to-speech request on the text input with the selected
@@ -582,6 +616,25 @@ def fetch_h1(url):
   bsh = BeautifulSoup(html.read(), 'html.parser')
   return bsh.h1.text
 
+
+def get_random_bomans_quote():
+    import random
+    r = random.randint(0, len(bomans) - 1)
+    return bomans[r]
+  
+def get_weather_now():
+    from urllib.request import urlopen
+    from bs4 import BeautifulSoup
+    html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
+    bsh = BeautifulSoup(html.read(), 'html.parser')
+    return bsh.select('h3 + div')[1].get_text()
+
+def get_weather_later():
+    from urllib.request import urlopen
+    from bs4 import BeautifulSoup
+    html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
+    bsh = BeautifulSoup(html.read(), 'html.parser')
+    return bsh.select('h3 + div')[2].get_text()
 
 if __name__ == '__main__':
     main()
