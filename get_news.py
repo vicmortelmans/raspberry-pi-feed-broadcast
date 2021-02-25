@@ -22,6 +22,7 @@ stream_koningsoord = "https://darkice.mx10.nl:8443/abdijkoningsoord"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
 db_news = "news.db"
+bomans_position = "bomans-position.txt" 
 with open('bomans.json') as f:
     bomans = json.load(f)
 
@@ -618,8 +619,16 @@ def fetch_h1(url):
 
 
 def get_random_bomans_quote():
-    import random
-    r = random.randint(0, len(bomans) - 1)
+    # cycle through the quotes; random is not a good idea, ít will take ages to have them all
+    if os.path.exists(bomans_position):
+	with open("bomans-position.txt", 'r', encoding = 'utf-8') as f:
+	    r = int(f.read())
+	if r == len(bomans):
+	    r = 0
+    else:
+	r = 0
+    with open("bomans-position.txt", 'w', encoding = 'utf-8') as f:
+	f.write(str(r))
     return bomans[r]
   
 def get_weather_now():
