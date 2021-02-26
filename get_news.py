@@ -621,14 +621,14 @@ def fetch_h1(url):
 def get_random_bomans_quote():
     # cycle through the quotes; random is not a good idea, ít will take ages to have them all
     if os.path.exists(bomans_position):
-	with open("bomans-position.txt", 'r', encoding = 'utf-8') as f:
-	    r = int(f.read())
-	if r == len(bomans):
-	    r = 0
+        with open("bomans-position.txt", 'r', encoding = 'utf-8') as f:
+            r = int(f.read())
+        if r == len(bomans):
+            r = 0
     else:
-	r = 0
+        r = 0
     with open("bomans-position.txt", 'w', encoding = 'utf-8') as f:
-	f.write(str(r))
+        f.write(str(r+1))
     return bomans[r]
   
 def get_weather_now():
