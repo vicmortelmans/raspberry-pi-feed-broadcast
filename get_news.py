@@ -26,6 +26,7 @@ bomans_position = "bomans-position.txt"
 with open('bomans.json') as f:
     bomans = json.load(f)
 
+klok_silence_file = '/tmp/klok-silence'
 
 # touch db_news
 if not os.path.exists(db_news):
@@ -186,7 +187,8 @@ def play_getijden():
     logger.info("[BUTTON] Play getijden, but already playing. Strange...")
 
 def announce_getijden():
-  broadcast([], tune_angelus)
+  if not os.path.isfile(klok_silence_file):
+    broadcast([], tune_angelus)
 
 def start_playing_getijden():
   global getijden_playing
