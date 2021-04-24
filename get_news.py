@@ -21,6 +21,7 @@ status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embe
 stream_koningsoord = "https://darkice.mx10.nl:8443/abdijkoningsoord"
 tune_news = "pips.ogg"
 tune_angelus = "angelus.mp3"
+tune_weer = "weerpraatje.mp3"
 db_news = "news.db"
 bomans_position = "bomans-position.txt" 
 with open('bomans.json') as f:
@@ -224,7 +225,7 @@ def read_weather_now():
     logger.info("[BUTTON] Going read")
     logger.info("Going to read weather now")
     weather = get_weather_now()
-    broadcast([weather], None)
+    broadcast([weather], tune_weer)
   button_weather.was_held = False
 
 
@@ -233,7 +234,7 @@ def read_weather_later():
     logger.info("[BUTTON] Going to read")
     logger.info("Going to read weather later")
     weather = get_weather_later()
-    broadcast([weather], None)
+    broadcast([weather], tune_weer)
 
 
 def read_latest_item():
