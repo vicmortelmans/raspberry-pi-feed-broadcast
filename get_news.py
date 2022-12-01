@@ -535,7 +535,6 @@ def broadcast_getijden(stream):
 def line_to_numbered_audio(line, num):
   # Set the text input to be synthesized
   ssml = line_to_ssml(line)
-#      import pdb; pdb.set_trace()
   logger.info("SSML formatted line: " + ssml + "")
   logger.info("Going to SynthesisInput")
   synthesis_input = texttospeech.SynthesisInput(ssml=ssml)
@@ -634,19 +633,28 @@ def get_random_bomans_quote():
         f.write(str(r+1))
     return bomans[r]
   
+def no_wind(text):
+    import pdb; pdb.set_trace()
+    sentences = text.split('. ')
+    newtext = ""
+    for s in sentences:
+        if 'wind' not in s:
+            newtext += s + '. '
+    return newtext
+
 def get_weather_now():
     from urllib.request import urlopen
     from bs4 import BeautifulSoup
     html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
     bsh = BeautifulSoup(html.read(), 'html.parser')
-    return bsh.select('h3 + div')[1].get_text()
+    return no_wind(bsh.select('h3 + div')[1].get_text())
 
 def get_weather_later():
     from urllib.request import urlopen
     from bs4 import BeautifulSoup
     html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
     bsh = BeautifulSoup(html.read(), 'html.parser')
-    return bsh.select('h3 + div')[2].get_text()
+    return no_wind(bsh.select('h3 + div')[2].get_text())
 
 if __name__ == '__main__':
     main()
