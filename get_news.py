@@ -34,6 +34,7 @@ if not os.path.exists(db_news):
   codecs.open(db_news, 'a', 'utf8').close()
 
 DEBUG = False
+#import pdb; pdb.set_trace()
 
 #setup logging
 logger = logging.getLogger('')
@@ -634,7 +635,6 @@ def get_random_bomans_quote():
     return bomans[r]
   
 def no_wind(text):
-    import pdb; pdb.set_trace()
     sentences = text.split('. ')
     newtext = ""
     for s in sentences:
@@ -647,6 +647,7 @@ def get_weather_now():
     from bs4 import BeautifulSoup
     html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
     bsh = BeautifulSoup(html.read(), 'html.parser')
+    logging.info("Read info from meteo.be")
     return no_wind(bsh.select('h3 + div')[1].get_text())
 
 def get_weather_later():
@@ -654,6 +655,7 @@ def get_weather_later():
     from bs4 import BeautifulSoup
     html = urlopen("https://www.meteo.be/nl/weer/verwachtingen/weer-voor-de-komende-dagen")
     bsh = BeautifulSoup(html.read(), 'html.parser')
+    logging.info("Read info from meteo.be")
     return no_wind(bsh.select('h3 + div')[2].get_text())
 
 if __name__ == '__main__':
