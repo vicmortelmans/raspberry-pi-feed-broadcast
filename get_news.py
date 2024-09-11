@@ -125,54 +125,8 @@ def calibrate():
   logger.info("Acquiring the klok_lock...")
   klok_lock.acquire()
   logger.info("Going to calibrate the clock")
-  os.system('python /home/pi/Public/klok/klok_calibrate.py')
+  os.system('python /home/vic/klok/klok_calibrate.py')
   klok_lock.release()
-
-
-#@threaded
-#def one_minute_backward():
-#  if not button_backward.was_held:
-#    logger.info("Acquiring the klok_lock...")
-#    klok_lock.acquire()
-#    logger.info("[BUTTON] Going one minute backward")
-#    os.system('python /home/pi/Public/klok/klok_1_minute_hands_backward.py')
-#    schedule_calibration()
-#    klok_lock.release()
-#  button_backward.was_held = False
-
-
-#@threaded
-#def ten_minutes_backward():
-#  button_backward.was_held = True
-#  logger.info("Acquiring the klok_lock...")
-#  klok_lock.acquire()
-#  logger.info("[BUTTON] Going ten minutes backward")
-#  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_backward.py')
-#  schedule_calibration()
-#  klok_lock.release()
-
-
-#@threaded
-#def one_minute_forward():
-#  if not button_forward.was_held:
-#    logger.info("Acquiring the klok_lock...")
-#    klok_lock.acquire()
-#    logger.info("[BUTTON] Going one minute forward")
-#    os.system('python /home/pi/Public/klok/klok_1_minute_hands_forward.py')
-#    schedule_calibration()
-#    klok_lock.release()
-#  button_forward.was_held = False
-
-
-#@threaded
-#def ten_minutes_forward():
-#  button_forward.was_held = True
-#  logger.info("Acquiring the klok_lock...")
-#  klok_lock.acquire()
-#  logger.info("[BUTTON] Going ten minutes forward")
-#  os.system('python /home/pi/Public/klok/klok_10_minutes_hands_forward.py')
-#  schedule_calibration()
-#  klok_lock.release()
 
 
 def play_getijden():
