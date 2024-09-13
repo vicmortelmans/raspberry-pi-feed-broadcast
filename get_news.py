@@ -163,7 +163,7 @@ def stop_playing_getijden():
   global getijden_playing
   if getijden_playing:
     logger.info("[BUTTON] Stop getijden")
-    os.system('killall omxplayer.bin')
+    os.system('killall mpg123')
   else:
     logger.info("[BUTTON] Stop getijden, but not playing, so doing nothing")
 
@@ -226,7 +226,7 @@ def kill_playing_broadcasts():
   logger.info("[BUTTON] Stop reading")
   logger.info("Set broadcast_mute to True")
   broadcast_mute = True
-  os.system('killall omxplayer.bin')
+  os.system('killall mpg123')
   if DEBUG: 
     os.system('killall pv')
 
@@ -286,8 +286,8 @@ def getijden():
   global getijden_status
 
   # This function runs in the background every five minutes. It reads the status_koningsoord.
-  # If they're streaming AND the switch is enabled, it starts an omxplayer with the stream
-  # In the meanwhile, it keeps polling, because if the streaming ends, the omxplayer must
+  # If they're streaming AND the switch is enabled, it starts an mpg123 with the stream
+  # In the meanwhile, it keeps polling, because if the streaming ends, the mpg123 must
   # be killed.
 
   logger.info("Polling getijden started")
@@ -426,13 +426,13 @@ def broadcast(lines, tune):
       # Play the announcement tune
       if tune and not broadcast_mute:
         logger.info("Playing tune: " + tune + "")
-        os.system("omxplayer --no-keys --no-osd " + tune)
+        os.system("mpg123 " + tune)
 
       for num, line in enumerate(lines):
         # Play the audio file
         if not broadcast_mute:
           logger.info("Playing audio for line: " + line + " from output" + str(num) + ".mp3")
-          os.system("omxplayer --no-keys --no-osd output" + str(num) + ".mp3")
+          os.system("mpg123 output" + str(num) + ".mp3")
         else:
           logger.info("broadcast_mute is True - not Playing audio for line: " + line + " from output" + str(num) + ".mp3")
 
@@ -473,7 +473,7 @@ def broadcast_getijden(stream):
     if not args.silent:
     
         logger.info("Playing stream: " + stream + "")
-        os.system("omxplayer --no-keys --no-osd --live " + stream)
+        os.system("mpg123 " + stream)
 
   except Exception as e:
     logger.error("ERROR while broadcasting getijden: " + str(e))
