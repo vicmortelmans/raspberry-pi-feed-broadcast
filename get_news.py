@@ -60,12 +60,12 @@ if not args.silent:
 # Define the buttons
 Button.was_held = False
 #button_backward = Button(20)
-button_bomans = Button(20)
+button_bomans = Button(20, bounce_time=0.1)
 #button_forward = Button(26)
-button_weather = Button(26)
+button_weather = Button(26, bounce_time=0.1)
 switch_news = Button(13)
 switch_getijden = Button(19)
-button_play = Button(16)
+button_play = Button(16, bounce_time=0.1)
 button_mute = Button(21)
 
 broadcast_mute = False
