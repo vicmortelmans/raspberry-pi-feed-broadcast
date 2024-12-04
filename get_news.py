@@ -19,7 +19,7 @@ import json
 urls_news = ["https://www.standaard.be/rss/section/1f2838d4-99ea-49f0-9102-138784c7ea7c","https://www.standaard.be/rss/section/e70ccf13-a2f0-42b0-8bd3-e32d424a0aa0"]
 status_koningsoord = "https://klanten.connectingmedia.nl/koningsoord/stream-embed.php"
 stream_koningsoord = "https://darkice.mx10.nl:8443/abdijkoningsoord"
-tune_news = "pips.ogg"
+tune_news = "pips.mp3"
 tune_angelus = "angelus.mp3"
 tune_weer = "weerpraatje.mp3"
 db_news = "news.db"
